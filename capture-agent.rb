@@ -87,7 +87,7 @@ class CaptureAgent
     p "ERROR: Received text is not JSON"
     return {}
   rescue Errno::ENOENT => e1
-    p "ERROR: no sock file #{e1}"
+    p "ERROR: no sock file (#{e1})"
     return {}
   end
 
