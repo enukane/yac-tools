@@ -69,7 +69,7 @@ class CaptureAgent
   private
   def get_msg type=CMD_GET_STATUS
     JSON.dump(
-      {"command": type}
+      {"command"=> type}
     )
   end
 

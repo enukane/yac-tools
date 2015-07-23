@@ -82,7 +82,7 @@ class YacuiMiniWindow
   end
 
   def draw_base_text_level4
-    @font.draw_solid_utf8(@screen, " START    STOP    MODE1    MODE2",
+    @font.draw_solid_utf8(@screen, "START | STOP | MODE1 | MODE2",
                           LEVEL4_BASE_X, LEVEL4_BASE_Y, 255, 255, 255)
   end
 
@@ -164,35 +164,54 @@ class YacuiMiniWindow
                           0, 255, 0)
   end
 
+  def draw_all
+    #back ground
+    @screen.fill_rect(0, 0, WIDTH, HEIGHT, @colors[COLOR_BLACK])
+
+    draw_lattice
+    draw_base_text
+
+    # update text
+    draw_var(1, 0, @date)
+    draw_var(1, 1, @hostname)
+
+    draw_var(2, 0, @state)
+    draw_var(2, 1, @file_name)
+    draw_var(2, 2, @file_size)
+    draw_var(2, 3, @duration)
+    draw_var(2, 4, @current_channel)
+    draw_var(2, 5, @channel_walk)
+    draw_var(2, 6, @size_per_sec)
+    draw_var(2, 7, @frame_count)
+
+    draw_var(3, 0, "#{@disk_usage}GB (#{@disk_usage_perc}%)")
+    draw_var(3, 1, "#{@mem_usage}MB (#{@mem_usage_perc}%)")
+    draw_var(3, 2, "#{@cpu_usage_perc}%")
+  end
+
   def run
+    draw_all
+    # background
+    @screen.fill_rect(0, 0, WIDTH, HEIGHT, @colors[COLOR_BLACK])
+    draw_lattice
+    draw_base_text
+    prev = Time.now.to_i
+
     while true
+      sleep 0.1
+
+      while event = SDL::Event.poll
+      end
+
+      now = Time.now.to_i
+      next if prev == now
+      prev = now
+
       update_var
 
-      # background
-      @screen.fill_rect(0, 0, WIDTH, HEIGHT, @colors[COLOR_BLACK])
-
-      draw_lattice
-      draw_base_text
-
-      # update text
-      draw_var(1, 0, @date)
-      draw_var(1, 1, @hostname)
-
-      draw_var(2, 0, @state)
-      draw_var(2, 1, @file_name)
-      draw_var(2, 2, @file_size)
-      draw_var(2, 3, @duration)
-      draw_var(2, 4, @current_channel)
-      draw_var(2, 5, @channel_walk)
-      draw_var(2, 6, @size_per_sec)
-      draw_var(2, 7, @frame_count)
-
-      draw_var(3, 0, "#{@disk_usage}GB (#{@disk_usage_perc}%)")
-      draw_var(3, 1, "#{@mem_usage}GB (#{@mem_usage_perc}%)")
-      draw_var(3, 2, "#{@cpu_usage_perc}%")
+      draw_all
 
       @screen.update_rect(0, 0, 0, 0)
-      sleep(0.01)
     end
   end
 
@@ -206,6 +225,12 @@ class YacuiMiniWindow
   end
 
   def init_sdl
+    SDL.putenv("SDL_VIDEODRIVER=fbdev")
+    SDL.putenv("SDL_FBDEV=/dev/fb1")
+    SDL.putenv("SDL_MOUSEDEV=/dev/input/touchscreen")
+    SDL.putenv("SDL_MOUSEDRV=TSLIB")
+
+
     SDL.init(SDL::INIT_VIDEO)
     @screen = SDL::Screen.open(WIDTH, HEIGHT, COLOR, SDL::SWSURFACE)
     @surface = SDL::Surface.new(SDL::SWSURFACE, WIDTH, HEIGHT, @screen)
@@ -221,7 +246,7 @@ class YacuiMiniWindow
     SDL::WM::set_caption CAPTION, CAPTION
 
     SDL::TTF::init
-    @font = SDL::TTF::open("OpenSans-Regular.ttf", 11)
+    @font = SDL::TTF::open("fonts/OpenSans-Regular.ttf", 12)
   end
 
   def init_var
@@ -260,7 +285,7 @@ class YacuiMiniWindow
     @date = get_date_str
     @last_update_time = now
 
-    if now < (@last_full_update_time + 5)
+    if now < (@last_full_update_time + 1)
       return
     end
 
@@ -274,6 +299,8 @@ class YacuiMiniWindow
     @hostname = get_hostname
     # disk
     @disk_usage, @disk_usage_perc = get_disk_usage()
+    @mem_usage, @mem_usage_perc = get_mem_usage()
+    @cpu_usage_perc = get_cpu_usage()
   end
 
   def update_var_agent
@@ -298,9 +325,38 @@ class YacuiMiniWindow
   end
 
   def get_mem_usage
+    total = 0
+    free = 0
+    File.open("/proc/meminfo") do |file|
+      total = file.gets.split[1].to_i
+      free = file.gets.split[1].to_i
+    end
+
+    used = total - free
+    used_perc = used * 100 / total
+    return [used/1000, used_perc]
   end
 
   def get_cpu_usage
+    current = []
+    File.open("/proc/stat") do |file|
+      current = file.gets.split[1..4].map{|elm| elm.to_i}
+    end
+    p current
+    if @prev_cpu == nil
+      @prev_cpu = current
+      return 0
+    end
+    p "cpu => #{current} vs #{@prev_cpu}"
+
+    usage_sub = current[0..2].inject(0){|sum, elm| sum += elm} -
+                @prev_cpu[0..2].inject(0){|sum, elm| sum += elm}
+    total_sub = current.inject(0){|sum, elm| sum += elm} -
+                @prev_cpu.inject(0){|sum, elm| sum += elm}
+
+    @prev_cpu = current
+    p "usage #{usage_sub} total_sub #{total_sub}"
+    return ((usage_sub * 100) / total_sub)
   end
 
   def get_disk_usage
@@ -308,12 +364,12 @@ class YacuiMiniWindow
     used_str = line[2]
     perc_str = line[4]
 
-    match = used_str.match(/^([1-9]+)([GMK])(i|)$/)
+    match = used_str.match(/^([1-9\.]+)([GMK])(i|)$/)
     unless match
       raise "failed to get disk usage"
     end
 
-    used = match[1]
+    used = match[1].to_f
     used = used / 1000 if match[2] == "M"
     used = used / 1000 / 1000 if match[2] == "K"
 
