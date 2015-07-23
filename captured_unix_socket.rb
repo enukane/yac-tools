@@ -1,0 +1,27 @@
+
+class CapturedUnixSocket
+  SOCKPATH="/var/run/captured.sock"
+
+  def initialize recv_handler, sock_path=SOCKPATH
+    @recv_handler = recv_handler
+    @sock_path = sock_path || SOCKPATH
+    @th = nil
+  end
+
+  def start
+    @th = Thread.new do
+      Socket.unix_server_loop(@sock_path) do |sock, addr|
+        p "UNIXSOCK: new connection from #{addr}, #{sock}"
+        data = sock.gets
+        p "UNIXSOCK: received => #{data}"
+        resp = @recv_handler.call(data)
+        sock.write(resp+"\n")
+        p "UNIXSOCK: responded #{resp}"
+      end
+    end
+  end
+
+  def stop
+    @th.kill
+  end
+end
