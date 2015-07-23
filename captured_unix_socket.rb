@@ -11,12 +11,9 @@ class CapturedUnixSocket
   def start
     @th = Thread.new do
       Socket.unix_server_loop(@sock_path) do |sock, addr|
-        p "UNIXSOCK: new connection from #{addr}, #{sock}"
         data = sock.gets
-        p "UNIXSOCK: received => #{data}"
         resp = @recv_handler.call(data)
         sock.write(resp+"\n")
-        p "UNIXSOCK: responded #{resp}"
       end
     end
   end
