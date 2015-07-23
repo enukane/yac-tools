@@ -35,8 +35,8 @@ class CaptureAgent
     # not responded?
     @state = STATE_UNKNOWN
     return {}
-  rescue
-    p "failed to get_status"
+  rescue => e
+    p "failed to get_status (#{e})"
     return {}
   end
 
@@ -54,11 +54,11 @@ class CaptureAgent
   end
 
   def stop_capture
-    resp = do_rpc(get_msg(CMD_START_CAPTURE))
+    resp = do_rpc(get_msg(CMD_STOP_CAPTURE))
     resp = get_status()
     if resp["state"] == STATE_STOP
       update_state(resp)
-      return resp
+      return true
     end
 
     # not responded?
@@ -99,5 +99,7 @@ class CaptureAgent
     @current_channel = msg["current_channel"]
     @channel_walk = msg["channel_walk"]
     @frame_count = msg["frame_count"]
+  rescue => e
+    p e
   end
 end

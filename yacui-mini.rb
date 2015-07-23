@@ -180,11 +180,11 @@ class YacuiMiniWindow
 
     draw_var(2, 0, @state)
     draw_var(2, 1, @file_name)
-    draw_var(2, 2, @file_size)
-    draw_var(2, 3, @duration)
+    draw_var(2, 2, file_size_to_h(@file_size))
+    draw_var(2, 3, duration_to_h(@duration))
     draw_var(2, 4, @current_channel)
     draw_var(2, 5, @channel_walk)
-    draw_var(2, 6, @size_per_sec)
+    draw_var(2, 6, file_size_to_h(@size_per_sec))
     draw_var(2, 7, @frame_count)
 
     draw_var(3, 0, "#{@disk_usage}GB (#{@disk_usage_perc}%)")
@@ -352,6 +352,7 @@ class YacuiMiniWindow
     @current_channel = @ca.current_channel
     @channel_walk = @ca.channel_walk
     @frame_count = @ca.frame_count
+    @size_per_sec = @file_size / @duration if @duration != 0
   end
 
   def get_date_str
@@ -415,7 +416,40 @@ class YacuiMiniWindow
     p e
     return [0, 0]
   end
+
+  def file_size_to_h bytes
+    return "0 B" if bytes == 0
+    kb = (bytes.to_f / 1000)
+    mb = kb.to_f / 1000
+    if mb < 1.0
+      return "#{(kb * 100).to_i.to_f/100} KB"
+    end
+    return "#{(mb * 100).to_i.to_f/100} MB"
+  end
+
+  def duration_to_h sec
+    return "0s" if sec == 0
+    time = sec
+    d_sec = sec % 60
+    time = time / 60
+    d_min = time % 60
+    time = time / 60
+    d_hour = time % 24
+    d_day = time / 24
+
+    str = ""
+    str += "#{d_day}d " if d_day > 0
+    str += "#{d_hour}h " if d_hour > 0
+    str += "#{d_min}m " if d_min > 0
+    str += "#{d_sec}s" if d_sec > 0
+
+    return str
+  end
 end
 
 yacui_mini = YacuiMiniWindow.new
+begin
 yacui_mini.run
+rescue => e
+  p e
+end
