@@ -13,7 +13,7 @@ class CaptureAgent
   STATE_INIT="init"
   STATE_RUNNING="running"
   STATE_STOP="stop"
-  StATE_UNKNOWN="unknown"
+  STATE_UNKNOWN="unknown"
 
   def initialize
     @state = STATE_INIT
@@ -29,15 +29,15 @@ class CaptureAgent
     resp = do_rpc(get_msg(CMD_GET_STATUS))
     if resp["state"] != nil
       update_state(resp)
-      return true
+      return resp
     end
 
     # not responded?
     @state = STATE_UNKNOWN
-    return false
+    return {}
   rescue
     p "failed to get_status"
-    return false
+    return {}
   end
 
   def start_capture
@@ -58,7 +58,7 @@ class CaptureAgent
     resp = get_status()
     if resp["state"] == STATE_STOP
       update_state(resp)
-      return true
+      return resp
     end
 
     # not responded?
@@ -85,6 +85,9 @@ class CaptureAgent
     return {}
   rescue JSON::ParserError => e0
     p "ERROR: Received text is not JSON"
+    return {}
+  rescue Errno::ENOENT => e1
+    p "ERROR: no sock file #{e1}"
     return {}
   end
 

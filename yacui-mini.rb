@@ -1,6 +1,7 @@
 require "sdl"
 require "socket"
 require_relative "capture-agent"
+require_relative "pitft_button"
 
 class YacuiMiniWindow
   DEBUG=true
@@ -84,6 +85,8 @@ class YacuiMiniWindow
   def draw_base_text_level4
     @font.draw_solid_utf8(@screen, "START | STOP | MODE1 | MODE2",
                           LEVEL4_BASE_X, LEVEL4_BASE_Y, 255, 255, 255)
+    @font.draw_solid_utf8(@screen, "stop count => #{@stop_count}",
+                         LEVEL4_BASE_X + 200, LEVEL4_BASE_Y, 255, 0, 0)
   end
 
   def get_level1_pos idx
@@ -203,6 +206,39 @@ class YacuiMiniWindow
       while event = SDL::Event.poll
       end
 
+      buttons = @pitft_button.button_all_edge()
+      if buttons[0] == true
+        @ca.start_capture()
+      elsif buttons[1] == true
+        case @stop_count
+        when 0
+          p "YACUI: stop stage 1"
+          @stop_count = 1
+        when 3
+          p "YACUI: activate stop"
+          @ca.stop_capture
+          @stop_count = 0
+        else
+          @stop_count = 0
+        end
+      elsif buttons[2] == true
+        case @stop_count
+        when 1
+          p "YACUI: stop stage 2"
+          @stop_count = 2
+        else
+          @stop_count = 0
+        end
+      elsif buttons[3] == true
+        case @stop_count
+        when 2
+          p "YACUI: stop stage 3"
+          @stop_count = 3
+        else
+          @stop_count = 0
+        end
+      end
+
       now = Time.now.to_i
       next if prev == now
       prev = now
@@ -210,7 +246,6 @@ class YacuiMiniWindow
       update_var
 
       draw_all
-
       @screen.update_rect(0, 0, 0, 0)
     end
   end
@@ -247,6 +282,9 @@ class YacuiMiniWindow
 
     SDL::TTF::init
     @font = SDL::TTF::open("fonts/OpenSans-Regular.ttf", 12)
+
+    @pitft_button = PiTFTButton.new
+    @stop_count = 0
   end
 
   def init_var
@@ -342,12 +380,10 @@ class YacuiMiniWindow
     File.open("/proc/stat") do |file|
       current = file.gets.split[1..4].map{|elm| elm.to_i}
     end
-    p current
     if @prev_cpu == nil
       @prev_cpu = current
       return 0
     end
-    p "cpu => #{current} vs #{@prev_cpu}"
 
     usage_sub = current[0..2].inject(0){|sum, elm| sum += elm} -
                 @prev_cpu[0..2].inject(0){|sum, elm| sum += elm}
@@ -355,7 +391,6 @@ class YacuiMiniWindow
                 @prev_cpu.inject(0){|sum, elm| sum += elm}
 
     @prev_cpu = current
-    p "usage #{usage_sub} total_sub #{total_sub}"
     return ((usage_sub * 100) / total_sub)
   end
 
