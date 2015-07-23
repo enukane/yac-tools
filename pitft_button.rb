@@ -71,3 +71,16 @@ class PiTFTButton
     return @io.digital_read(pin) == 0
   end
 end
+
+if __FILE__ == $0
+  pitftb = PiTFTButton.new
+  while true
+    buttons = pitftb.button_all_edge
+    0.upto(3) do |n|
+      bn = n + 1
+      if buttons[n] == true
+        print "Button #{bn} is On"
+      end
+    end
+  end
+end
