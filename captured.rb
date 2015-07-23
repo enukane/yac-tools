@@ -3,6 +3,7 @@ require "json"
 require "thread"
 require "open3"
 require_relative "captured_unix_socket"
+require_relative "wlan"
 
 class Captured
   DEFAULT_CAP_PATH="/cap"
@@ -16,18 +17,14 @@ class Captured
   STATE_RUNNING="running"
   STATE_STOP="stop"
 
-  CHAN = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
-34, 36, 38, 40, 42, 44, 46, 48,
-52, 56, 60, 64,
-100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 
-184, 188, 192, 196]
-
   def initialize ifname=DEFAULT_IFNAME, cap_path=DEFAULT_CAP_PATH
     @cap_path = cap_path || DEFAULT_CAP_PATH
     @ifname = ifname || DEFAULT_IFNAME
 
     check_requirements()
     init_status()
+
+    @wlan = Wlan.new(@ifname)
 
     @th_capture = nil
     @event_q = Queue.new
@@ -62,11 +59,6 @@ class Captured
   def init_status new_state=STATE_INIT
     @state = new_state
     @file_name = ""
-    @file_size = 0
-    @duration = 0
-    @current_channel = 0
-    @channel_walk = 0
-    @frame_count = 0
   end
 
   def recv_handler msg
@@ -128,11 +120,10 @@ class Captured
     return {
       "state"           => @state,
       "file_name"       => @file_name,
-      "file_size"       => @file_size,
-      "duration"        => @duration,
-      "current_channel" => @current_channel,
-      "channel_walk"    => @channel_walk,
-      "frame_count"     => @frame_count,
+      "file_size"       => @wlan.file_size,
+      "duration"        => @wlan.duration,
+      "current_channel" => @wlan.current_channel,
+      "channel_walk"    => @wlan.channel_walk,
     }
   end
 
@@ -173,52 +164,19 @@ class Captured
   end
 
   def do_start_capture
-    @th_capture = nil
-    @th_tshark = nil
     @file_name = generate_new_filename()
-    @current_channel = 1
 
     @th_capture = Thread.new do
-      # these tshark/if handling should be exported away
       file_path = "#{@cap_path}/#{@file_name}"
-      system("ip link set wlan0 down")
-      system("iw wlan0 set monitor fcsfail otherbss control")
-      system("ip link set wlan0 up")
-      system("iw wlan0 set channel #{@current_channel}")
-      @start_time = Time.now.to_i
-
-      begin
-      stdin, stdout, stderr, @th_tshark = *Open3.popen3(
-        "tshark -i #{@ifname} -F pcapng -w #{file_path}")
-      rescue => e
-        p e
-      end
-
-      while @th_tshark.alive?
-        sleep 1
-        @duration = Time.now.to_i - @start_time
-        @file_size = File.size?(file_path) || 0
-
-        # do something that requires to run in every channel
-
-        @current_channel = move_channel(@current_channel)
-        @channel_walk += 1
-        p "channel move to #{@current_channel} (dur=#{@duration}, size=#{@file_size} walk=#{@channel_walk})"
-      end
+      @wlan.run_capture(file_path) # block until stopped
     end
   end
 
   def do_stop_capture
-    if @th_tshark == nil
-      p "thread has not yet started?"
-      return
-    end
+    @wlan.stop_capture
 
-    p "killing pid #{@th_tshark.pid}"
-    Process.kill("INT", @th_tshark.pid)
-    sleep 2
     p "killing capture thread #{@th_capture}"
-    @th_capture.kill
+    @th_capture.kill if @th_capture
   end
 
   def generate_new_filename()
